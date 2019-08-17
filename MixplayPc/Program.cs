@@ -10,31 +10,85 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
 using System.Threading.Tasks;
-
+using System.Threading;
 namespace Mixer.ChatSample.Console
 {
 
 
-    public class MixerController
+    public class MixerController : IDisposable
     {
         ScpBus bus;
 
+        Timer sendThread;
         public MixerController()
         {
-            this.bus = new ScpBus();
+            bus = new ScpBus();
+            bus.PlugIn(1);
 
+
+            sendThread = new Timer(SendData, null, 100, 100);
         }
 
-        public void Start()
+        private void SendData(object state)
         {
-
+            bus.Report(1, controller.GetReport());
         }
+
+        public X360Controller controller = new X360Controller();
+
+        #region IDisposable Support
+        private bool disposedValue = false; // To detect redundant calls
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    sendThread.Dispose();
+                    bus.Unplug(1);
+                    bus.Dispose();
+                }
+
+                // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.
+                // TODO: set large fields to null.
+
+                disposedValue = true;
+            }
+        }
+
+        // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
+        // ~MixerController()
+        // {
+        //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+        //   Dispose(false);
+        // }
+
+        // This code added to correctly implement the disposable pattern.
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(true);
+            // TODO: uncomment the following line if the finalizer is overridden above.
+            // GC.SuppressFinalize(this);
+        }
+        #endregion
 
     }
 
-
+    public static class X360ControllerExtensions
+    {
+        public static void SetButton(this X360Controller controller, X360Buttons buttons, bool value)
+        {
+            var v = controller.Buttons & ~buttons;
+            if (value)
+                v |= buttons;
+            controller.Buttons = v;
+        }
+    }
     public class Program
     {
+        public static MixerController controller = new MixerController();
         private static InteractiveClient interactiveClient;
         private static List<InteractiveConnectedSceneModel> scenes = new List<InteractiveConnectedSceneModel>();
         private static List<InteractiveConnectedButtonControlModel> buttons = new List<InteractiveConnectedButtonControlModel>();
@@ -71,18 +125,25 @@ namespace Mixer.ChatSample.Console
                 System.Console.WriteLine(string.Format("Logged in as: {0}", user.username));
 
 
-                List<InteractiveGameListingModel> games = new List<InteractiveGameListingModel>(connection.Interactive.GetOwnedInteractiveGames(channel).Result);
-                InteractiveGameListingModel game = games[4];
-                if (game != null)
+                //List<InteractiveGameListingModel> games = new List<InteractiveGameListingModel>(connection.Interactive.GetOwnedInteractiveGames(channel).Result);
+
+                //InteractiveGameListingModel game = games[4];
+
+
+                var gameVersion = connection.Interactive.GetInteractiveGameVersion(185683).Result;
+                var game = connection.Interactive.GetInteractiveGame(gameVersion.gameId).Result;
+
+
+                if (gameVersion != null)
                 {
                     System.Console.WriteLine();
                     System.Console.WriteLine(string.Format("Connecting to channel interactive using game {0}...", game.name));
 
-                    Program.interactiveClient = InteractiveClient.CreateFromChannel(connection, channel, game).Result;
+                    interactiveClient = InteractiveClient.CreateFromChannel(connection, channel, game, gameVersion).Result;
 
-                    if (Program.interactiveClient.Connect().Result && Program.interactiveClient.Ready().Result)
+                    if (interactiveClient.Connect().Result && interactiveClient.Ready().Result)
                     {
-                        InteractiveConnectedSceneGroupCollectionModel scenes = Program.interactiveClient.GetScenes().Result;
+                        InteractiveConnectedSceneGroupCollectionModel scenes = interactiveClient.GetScenes().Result;
                         if (scenes != null)
                         {
                             Program.scenes.AddRange(scenes.scenes);
@@ -91,22 +152,22 @@ namespace Mixer.ChatSample.Console
                             {
                                 foreach (InteractiveConnectedButtonControlModel button in scene.buttons)
                                 {
-                                    Program.buttons.Add(button);
+                                    buttons.Add(button);
                                 }
 
                                 foreach (InteractiveConnectedJoystickControlModel joystick in scene.joysticks)
                                 {
-                                    Program.joysticks.Add(joystick);
+                                    joysticks.Add(joystick);
                                 }
 
                                 foreach (InteractiveConnectedLabelControlModel label in scene.labels)
                                 {
-                                    Program.labels.Add(label);
+                                    labels.Add(label);
                                 }
 
                                 foreach (InteractiveConnectedTextBoxControlModel textBox in scene.textBoxes)
                                 {
-                                    Program.textBoxes.Add(textBox);
+                                    textBoxes.Add(textBox);
                                 }
 
                                 foreach (InteractiveControlModel control in scene.allControls)
@@ -114,20 +175,48 @@ namespace Mixer.ChatSample.Console
                                     control.disabled = false;
                                 }
 
-                                Program.interactiveClient.UpdateControls(scene, scene.allControls).Wait();
+                                interactiveClient.UpdateControls(scene, scene.allControls).Wait();
                             }
 
-                            Program.interactiveClient.OnDisconnectOccurred += InteractiveClient_OnDisconnectOccurred;
-                            Program.interactiveClient.OnParticipantJoin += InteractiveClient_OnParticipantJoin;
-                            Program.interactiveClient.OnParticipantLeave += InteractiveClient_OnParticipantLeave;
-                            Program.interactiveClient.OnGiveInput += InteractiveClient_OnGiveInput;
-
+                            interactiveClient.OnDisconnectOccurred += InteractiveClient_OnDisconnectOccurred;
+                            interactiveClient.OnParticipantJoin += InteractiveClient_OnParticipantJoin;
+                            interactiveClient.OnParticipantLeave += InteractiveClient_OnParticipantLeave;
+                            interactiveClient.OnGiveInput += InteractiveClient_OnGiveInput;
+                            interactiveClient.OnEventOccurred += InteractiveClient_OnEventOccurred;
+                            interactiveClient.OnPacketReceivedOccurred += InteractiveClient_OnPacketReceivedOccurred;
+                            interactiveClient.OnMethodOccurred += InteractiveClient_OnMethodOccurred;
                             while (true) { }
                         }
                     }
                 }
             }
         }
+
+
+        /*
+         * 
+        [{"type":"method","method":"onSceneCreate","params":{"scenes":[{"sceneID":"controls","etag":"","controls":[{"controlID":"controller_plugin_reminder","kind":"label","etag":"","disabled":false,"cooldown":0,"cost":0,"text":"locStrControllerReminder","meta":{},"position":[{"size":"large","x":32,"y":0,"width":47,"height":4}],"textSize":"12pt"},{"controlID":"crowdController","kind":"controller","etag":"","disabled":false,"cooldown":0,"cost":0,"meta":{},"text":"Xbox Controller","position":[{"width":30,"height":27,"size":"large","x":0,"y":0},{"size":"medium","width":30,"height":27,"x":0,"y":0},{"size":"small","width":30,"height":27,"x":0,"y":0}]},{"controlID":"leave","kind":"button","etag":"","disabled":false,"cooldown":0,"cost":0,"meta":{},"position":[{"size":"large","x":6,"y":0,"width":26,"height":4},{"size":"medium","x":0,"y":0,"width":26,"height":4},{"size":"small","x":0,"y":0,"width":26,"height":4}],"text":"locStrStopControlling"}],"groups":[{"groupID":"controlling","etag":"","sceneID":"controls","meta":{}}],"meta":{}}]},"id":0,"seq":4,"discard":true},{"type":"method","method":"onSceneDelete","params":{"sceneID":"default","reassignSceneID":"controls"},"id":0,"seq":4,"discard":true},{"type":"method","method":"onGroupCreate","params":{"groups":[{"groupID":"controlling","etag":"","sceneID":"controls","meta":{}}]},"id":0,"seq":4,"discard":true},{"type":"method","method":"onGroupDelete","params":{"groupID":"default","reassignGroupID":"controlling"},"id":0,"seq":4,"discard":true}]
+        {"type":"method","method":"onParticipantUpdate","params":{"participants":[{"sessionID":"ff949acc-ea89-4ab0-8b29-617c84f6c2db","etag":"","userID":46740637,"username":"LizeLive","level":81,"lastInputAt":1566008741177,"connectedAt":1566008734386,"channelGroups":["User"],"disabled":false,"groupID":"controlling","anonymous":false,"meta":{}}]},"id":0,"seq":5,"discard":true}
+        {"type":"method","method":"onControlUpdate","params":{"sceneID":"controls","controls":[{"controlID":"crowdController","kind":"controller","etag":"","disabled":false,"cooldown":0,"cost":0,"meta":{},"text":"Xbox Controller","position":[{"width":30,"height":27,"size":"large","x":0,"y":0},{"size":"medium","width":30,"height":27,"x":0,"y":0},{"size":"small","width":30,"height":27,"x":0,"y":0}]}]},"id":0,"seq":8,"discard":true}
+        
+             
+             */
+        private static void InteractiveClient_OnMethodOccurred(object sender, Base.Model.Client.MethodPacket e)
+        {
+            System.Console.WriteLine($"{e.method} {e.seq} {e.id} {e.type} {e.parameters}");
+        }
+
+        private static void InteractiveClient_OnPacketReceivedOccurred(object sender, Base.Model.Client.WebSocketPacket e)
+        {
+            System.Console.WriteLine(e.type);
+        }
+
+        private static void InteractiveClient_OnEventOccurred(object sender, Base.Model.Client.EventPacket e)
+        {
+            System.Console.WriteLine(e.eventName);
+        }
+
+        public static Dictionary<string, InteractiveParticipantModel> Users = new Dictionary<string, InteractiveParticipantModel>();
 
         private static async void InteractiveClient_OnDisconnectOccurred(object sender, System.Net.WebSockets.WebSocketCloseStatus e)
         {
@@ -137,7 +226,7 @@ namespace Mixer.ChatSample.Console
             {
                 await Task.Delay(2500);
             }
-            while (!await Program.interactiveClient.Connect() && !await Program.interactiveClient.Ready());
+            while (!await interactiveClient.Connect() && !await interactiveClient.Ready());
 
             System.Console.WriteLine("Reconnection successful");
         }
@@ -148,6 +237,8 @@ namespace Mixer.ChatSample.Console
             {
                 foreach (InteractiveParticipantModel participant in e.participants)
                 {
+                    Users.Add(participant.sessionID, participant);
+
                     System.Console.WriteLine("Participant Joined: " + participant.username);
                 }
             }
@@ -159,6 +250,7 @@ namespace Mixer.ChatSample.Console
             {
                 foreach (InteractiveParticipantModel participant in e.participants)
                 {
+                    Users.Remove(participant.sessionID);
                     System.Console.WriteLine("Participant Left: " + participant.username);
                 }
             }
@@ -166,25 +258,46 @@ namespace Mixer.ChatSample.Console
 
         private static void InteractiveClient_OnGiveInput(object sender, InteractiveGiveInputModel e)
         {
-            System.Console.WriteLine("Input Received: " + e.participantID + " - " + e.input.eventType + " - " + e.input.controlID);
 
-            if (e.input.eventType.Equals("mousedown") && e.transactionID != null)
+            var allow = Users.TryGetValue(e.participantID, out var participant);
+            if (!allow)
+                return;
+
+            System.Console.WriteLine("Input Received: " + participant.username + " - " + e.input.eventType + " - " + e.input.controlID);
+
+
+            var i = e.input;
+            var c = controller.controller;
+
+            if (i.eventType == "mousedown" || i.eventType == "mouseup")
             {
-                InteractiveConnectedButtonControlModel button = Program.buttons.FirstOrDefault(b => b.controlID.Equals(e.input.controlID));
-                if (button != null)
-                {
-                    InteractiveConnectedSceneModel scene = Program.scenes.FirstOrDefault(s => s.buttons.Contains(button));
-                    if (scene != null)
-                    {
-                        button.cooldown = DateTimeHelper.DateTimeOffsetToUnixTimestamp(DateTimeOffset.Now.AddSeconds(10));
+                var pressed = i.eventType == "mousedown";
 
-                        Program.interactiveClient.UpdateControls(scene, new List<InteractiveConnectedButtonControlModel>() { button }).Wait();
-                        System.Console.WriteLine("Sent 10 second cooldown to button: " + e.input.controlID);
-                    }
+                if(Enum.TryParse<X360Buttons>(i.controlID, out var button))
+                {
+                    c.SetButton(button, pressed);
                 }
 
-                Program.interactiveClient.CaptureSparkTransaction(e.transactionID).Wait();
-                System.Console.WriteLine("Spark Transaction Captured: " + e.participantID + " - " + e.input.eventType + " - " + e.input.controlID);
+            }
+            else if (e.input.eventType == "move")
+            {
+                var x = (short)(short.MaxValue * e.input.x);
+                var y = (short)(short.MaxValue * -e.input.y);
+                
+                if (i.controlID == "LeftStick")
+                {
+                    c.LeftStickX = x;
+                    c.LeftStickY = y;
+                }
+
+                if (i.controlID == "RightStick")
+                {
+                    c.RightStickX = x;
+                    c.RightStickY = y;
+                }
+
+
+                System.Console.WriteLine($"move {i.controlID} {x} {y}");
             }
             else
             {
@@ -193,3 +306,4 @@ namespace Mixer.ChatSample.Console
         }
     }
 }
+ 
