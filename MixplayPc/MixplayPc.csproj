@@ -6,7 +6,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Nefarius.ViGEmClient" Version="1.15.16" />
+    <PackageReference Include="mixer-client-csharp" Version="0.8.4.12-beta" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="ScpDriverInterface">
+      <HintPath>ScpDriverInterface.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>
