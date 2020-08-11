@@ -112,7 +112,7 @@ namespace Mixer.ChatSample.Console
                 OAuthClientScopeEnum.user__update__self,
             };
 
-            System.Console.WriteLine("Connecting to Mixer...");  
+            System.Console.WriteLine("Connecting to Mixer...");
 
             MixerConnection connection = MixerConnection.ConnectViaLocalhostOAuthBrowser(ConfigurationManager.AppSettings["ClientID"], scopes).Result;
 
@@ -201,6 +201,11 @@ namespace Mixer.ChatSample.Console
         
              
              */
+
+
+
+
+
         private static void InteractiveClient_OnMethodOccurred(object sender, Base.Model.Client.MethodPacket e)
         {
             System.Console.WriteLine($"{e.method} {e.seq} {e.id} {e.type} {e.parameters}");
@@ -266,14 +271,36 @@ namespace Mixer.ChatSample.Console
             System.Console.WriteLine("Input Received: " + participant.username + " - " + e.input.eventType + " - " + e.input.controlID);
 
 
+
             var i = e.input;
             var c = controller.controller;
+
+
+            if (i.eventType == "mousedown" && i.controlID == "join")
+            {
+                //interactiveClient.UpdateControls(scene, scene.allControls).Wait();
+
+                //new InteractiveButtonControlModel
+                //{
+                //    controlID= "join",
+                //    disabled = true,
+
+                //}
+
+                /*
+ * {"type":"method","method":"onControlUpdate","params":{"sceneID":"default","controls":[{"controlID":"join","kind":"button","etag":"","disabled":true,"cooldown":0,"cost":0,"hidden":false,"position":[{"size":"large","width":20,"height":4,"x":58,"y":4},{"size":"medium","width":32,"height":4,"x":10,"y":7},{"size":"small","width":32,"height":4,"x":0,"y":13}],"text":"locStrJoin","meta":{}}]},"id":0,"seq":4,"discard":true}
+ * 
+ * 
+ */
+
+            }
+
 
             if (i.eventType == "mousedown" || i.eventType == "mouseup")
             {
                 var pressed = i.eventType == "mousedown";
 
-                if(Enum.TryParse<X360Buttons>(i.controlID, out var button))
+                if (Enum.TryParse<X360Buttons>(i.controlID, out var button))
                 {
                     c.SetButton(button, pressed);
                 }
@@ -283,7 +310,7 @@ namespace Mixer.ChatSample.Console
             {
                 var x = (short)(short.MaxValue * e.input.x);
                 var y = (short)(short.MaxValue * -e.input.y);
-                
+
                 if (i.controlID == "LeftStick")
                 {
                     c.LeftStickX = x;
@@ -306,4 +333,3 @@ namespace Mixer.ChatSample.Console
         }
     }
 }
- 
